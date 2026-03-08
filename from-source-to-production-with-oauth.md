@@ -214,26 +214,38 @@ The gateway's OIDC integration uses Auth0's [Universal Login](https://auth0.com/
 
 1. Sign up or log in at [dashboard.stripe.com](https://dashboard.stripe.com)
 2. Make sure you're in **Test mode** (toggle in the top-right)
-3. Go to **Developers → Webhooks → Add endpoint**
-4. Set the endpoint URL and events:
+3. Open the **Webhooks** tab in [Workbench](https://dashboard.stripe.com/webhooks) and click **Create an event destination**
+4. Walk through the creation flow:
 
-> **Stripe Dashboard → Developers → Webhooks → Add endpoint**
+> **Stripe Dashboard → Workbench → Webhooks → Create an event destination**
+>
+> **Events from**
+> ```
+> Your account
+> ```
+>
+> **API version**
+> Select your default API version (or latest).
+>
+> **Events**
+> ```
+> checkout.session.completed
+> payment_intent.succeeded
+> ```
+>
+> Click **Continue**, then select **Webhook endpoint** as the destination type.
+>
+> Click **Continue**, then set:
 >
 > **Endpoint URL**
 > ```
 > https://dev.myapp.com/webhooks/stripe
 > ```
->
-> **Events to send**
-> ```
-> checkout.session.completed
-> payment_intent.succeeded
-> ```
 
-5. Click **Add endpoint**
-6. On the endpoint detail page, click **Reveal** under **Signing secret** and copy the `whsec_...` value
+5. Click **Create destination**
+6. Select your new endpoint, then click **Click to reveal** to copy the signing secret (`whsec_...`)
 
-> **Stripe Dashboard → Developers → Webhooks → (your endpoint) → Signing secret → Reveal**
+> **Stripe Dashboard → Workbench → Webhooks → (your endpoint) → Click to reveal**
 >
 > Copy the value starting with `whsec_` — you'll pass this to `kindling secrets set` below.
 
