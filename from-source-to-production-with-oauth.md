@@ -118,13 +118,68 @@ Attach your IDE's debugger to `localhost:5678` and set breakpoints in the orders
 
 Here's where it gets interesting. Auth0 requires a callback URL like `https://your-domain.com/auth/callback`. Stripe requires a webhook URL like `https://your-domain.com/webhooks/stripe`. Both need real, public HTTPS endpoints.
 
-First, set a stable tunnel domain:
+First, open a public tunnel to your cluster:
 
 ```bash
-kindling expose --domain myapp-dev.ngrok-free.app
+kindling expose
 ```
 
-Kindling saves this domain and reuses it on every subsequent `kindling expose`. The URL never changes. Configure it once in Auth0 and Stripe, forget about it.
+This starts a Cloudflare quick tunnel — a free, zero-config HTTPS tunnel that routes a random `*.trycloudflare.com` URL to your cluster's ingress controller. Great for ad-hoc testing, but the URL changes every session.
+
+For OAuth and webhook callbacks, you need a **stable** URL — one you configure once in Auth0 and Stripe and never touch again. Kindling handles this with callback routing under a domain you control:
+
+```bash
+kindling expose --domain dev.myapp.com \
+  --route /auth/callback=gateway \
+  --route /webhooks/stripe=gateway
+```
+
+This creates a callback Ingress in your cluster that routes specific paths to the right services. It works with any externally-managed Cloudflare tunnel that routes your domain to `localhost:80` — a named tunnel you set up once via the Cloudflare dashboard.
+
+The routes are persisted. Next time you start the cluster, just run `kindling expose --domain dev.myapp.com --list` to see what's configured, or add/remove routes as your app evolves.
+
+### Set up a Cloudflare tunnel (one time)
+
+1. Sign up or log in at [dash.cloudflare.com](https://dash.cloudflare.com)
+2. Go to **Zero Trust → Networks → Tunnels → Create a tunnel**
+3. Name it something like `kindling-dev`, select **Cloudflared**, and click **Save**
+4. Install the connector on your machine — Cloudflare shows the exact command with your tunnel token:
+
+> **Cloudflare Dashboard → Zero Trust → Networks → Tunnels → kindling-dev → Install and run a connector**
+>
+> Copy the install command — it contains your tunnel token and registers cloudflared as a system service.
+> On macOS with Homebrew, it looks like:
+> ```
+> sudo cloudflared service install <your-tunnel-token>
+> ```
+
+5. Add a public hostname to route your domain to the cluster:
+
+> **Cloudflare Dashboard → Zero Trust → Networks → Tunnels → kindling-dev → Public Hostname → Add a public hostname**
+>
+> **Subdomain**
+> ```
+> dev
+> ```
+>
+> **Domain**
+> ```
+> myapp.com
+> ```
+>
+> **Service — Type**
+> ```
+> HTTP
+> ```
+>
+> **Service — URL**
+> ```
+> localhost:80
+> ```
+
+6. Click **Save hostname**
+
+The tunnel runs as a system service and stays connected across reboots. Your domain (`dev.myapp.com`) now routes to `localhost:80`, where Traefik picks it up and routes to the callback Ingress kindling created.
 
 ### Create an Auth0 application
 
@@ -135,26 +190,59 @@ Kindling saves this domain and reuses it on every subsequent `kindling expose`. 
    - **Domain** (e.g. `your-tenant.us.auth0.com`)
    - **Client ID**
    - **Client Secret**
-5. Scroll down to **Application URIs** and set:
-   - **Allowed Callback URLs**: `https://myapp-dev.ngrok-free.app/auth/callback`
-   - **Allowed Logout URLs**: `https://myapp-dev.ngrok-free.app`
+5. Scroll down to **Application URIs** and set the following values:
+
+> **Auth0 Dashboard → Applications → oauth-test-dev → Settings → Application URIs**
+>
+> **Allowed Callback URLs**
+> ```
+> https://dev.myapp.com/auth/callback
+> ```
+>
+> **Allowed Logout URLs**
+> ```
+> https://dev.myapp.com
+> ```
+>
+> **Allowed Web Origins**
+> ```
+> https://dev.myapp.com
+> ```
+
 6. Click **Save Changes**
 
-That's it. The gateway's OIDC integration uses Auth0's [Universal Login](https://auth0.com/docs/authenticate/login/auth0-universal-login) — no custom login page needed. For more detail, see [Auth0's Getting Started guide](https://auth0.com/docs/get-started).
+The callback URL is what Auth0 redirects to after a user authenticates. It must match *exactly* what the gateway sends in the OIDC authorization request — the path `/auth/callback` is handled by the gateway's OIDC callback handler, which exchanges the authorization code for tokens and sets a session cookie.
+
+The gateway's OIDC integration uses Auth0's [Universal Login](https://auth0.com/docs/authenticate/login/auth0-universal-login) — no custom login page needed. For more detail, see [Auth0's Getting Started guide](https://auth0.com/docs/get-started).
 
 ### Create a Stripe webhook endpoint
 
 1. Sign up or log in at [dashboard.stripe.com](https://dashboard.stripe.com)
 2. Make sure you're in **Test mode** (toggle in the top-right)
 3. Go to **Developers → Webhooks → Add endpoint**
-4. Set the **Endpoint URL** to `https://myapp-dev.ngrok-free.app/webhooks/stripe`
-5. Under **Select events to listen to**, add:
-   - `checkout.session.completed`
-   - `payment_intent.succeeded`
-6. Click **Add endpoint**
-7. On the endpoint detail page, click **Reveal** under **Signing secret** and copy the `whsec_...` value
+4. Set the endpoint URL and events:
 
-The gateway verifies every incoming webhook against this signing secret using HMAC-SHA256 before forwarding to the orders service. See [Stripe's webhook docs](https://docs.stripe.com/webhooks) for background on signature verification and event types.
+> **Stripe Dashboard → Developers → Webhooks → Add endpoint**
+>
+> **Endpoint URL**
+> ```
+> https://dev.myapp.com/webhooks/stripe
+> ```
+>
+> **Events to send**
+> ```
+> checkout.session.completed
+> payment_intent.succeeded
+> ```
+
+5. Click **Add endpoint**
+6. On the endpoint detail page, click **Reveal** under **Signing secret** and copy the `whsec_...` value
+
+> **Stripe Dashboard → Developers → Webhooks → (your endpoint) → Signing secret → Reveal**
+>
+> Copy the value starting with `whsec_` — you'll pass this to `kindling secrets set` below.
+
+The webhook URL is where Stripe sends event payloads via POST. The gateway receives the request at `/webhooks/stripe`, verifies the `Stripe-Signature` header against the signing secret using HMAC-SHA256, and forwards validated payloads to the orders service. Unverified requests are rejected with a 400. See [Stripe's webhook docs](https://docs.stripe.com/webhooks) for background on signature verification and event types.
 
 ### Set the secrets
 
@@ -166,7 +254,7 @@ kindling secrets set AUTH0_CLIENT_ID your-client-id
 kindling secrets set AUTH0_CLIENT_SECRET your-client-secret
 kindling secrets set SESSION_SECRET $(openssl rand -hex 32)
 kindling secrets set STRIPE_WEBHOOK_SECRET whsec_your_signing_secret
-kindling secrets set PUBLIC_URL https://myapp-dev.ngrok-free.app
+kindling secrets set PUBLIC_URL https://dev.myapp.com
 ```
 
 The DSE manifests reference these via `secretKeyRef` — the operator injects them as environment variables into the gateway pod. No secrets in YAML. No secrets in env files. No secrets in git.
@@ -181,15 +269,15 @@ Verify everything is wired:
 
 ```bash
 curl http://jeff-vincent-gateway.localhost/auth/status
-# {"auth0_configured":true,"callback_url":"https://myapp-dev.ngrok-free.app/auth/callback"}
+# {"auth0_configured":true,"callback_url":"https://dev.myapp.com/auth/callback"}
 
 curl http://jeff-vincent-gateway.localhost/stripe/status
-# {"stripe_webhook_configured":true,"webhook_url":"https://myapp-dev.ngrok-free.app/webhooks/stripe"}
+# {"stripe_webhook_configured":true,"webhook_url":"https://dev.myapp.com/webhooks/stripe"}
 ```
 
-Open the UI in your browser, click Login — Auth0's universal login page loads, you authenticate, and the callback redirects to your tunnel URL, which routes through Traefik to the gateway, which exchanges the code for tokens and sets a session cookie. The full OIDC flow, running locally.
+Open the UI in your browser, click Login — Auth0's universal login page loads, you authenticate, and the callback redirects to your stable domain, which routes through Cloudflare → localhost:80 → Traefik → the callback Ingress → the gateway, which exchanges the code for tokens and sets a session cookie. The full OIDC flow, running locally.
 
-For Stripe, trigger a test event from the Stripe Dashboard (or use the [Stripe CLI](https://docs.stripe.com/stripe-cli)). The event hits the gateway at your tunnel URL, the signature is verified against the signing secret, and the payload is forwarded to the orders service, which updates the order status in Postgres.
+For Stripe, trigger a test event from the Stripe Dashboard (or use the [Stripe CLI](https://docs.stripe.com/stripe-cli)). The event hits the gateway at your stable domain via the same path — Cloudflare tunnel → Traefik → callback Ingress → gateway — the signature is verified against the signing secret, and the payload is forwarded to the orders service, which updates the order status in Postgres.
 
 ## Step 7: Deploy to production
 
@@ -225,7 +313,7 @@ Let's trace the full path:
 3. **`kindling generate`** — AI-generated CI workflow
 4. **`git push`** — local runner builds with Kaniko, deploys via operator
 5. **`kindling sync`** — live code changes without rebuilding
-6. **`kindling expose --domain`** — stable public HTTPS URL for OAuth/webhooks
+6. **`kindling expose`** — quick tunnel for ad-hoc testing; `--domain` + `--route` for stable OAuth/webhook callbacks
 7. **`kindling secrets set`** — secure secret injection, no hardcoding
 8. **Production deploy** — same images, same config, real cluster with TLS
 
