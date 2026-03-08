@@ -153,18 +153,13 @@ The routes are persisted. Next time you start the cluster, just run `kindling ex
 > sudo cloudflared service install <your-tunnel-token>
 > ```
 
-5. Add a public hostname to route your domain to the cluster:
+5. Add a route to map your domain to the cluster:
 
-> **Cloudflare Dashboard → Zero Trust → Networks → Tunnels → kindling-dev → Public Hostname → Add a public hostname**
+> **Cloudflare Dashboard → Zero Trust → Networks → Tunnels → kindling-dev → Routes → Add Route**
 >
-> **Subdomain**
+> **Private Hostname**
 > ```
-> dev
-> ```
->
-> **Domain**
-> ```
-> myapp.com
+> dev.myapp.com
 > ```
 >
 > **Service — Type**
@@ -177,7 +172,7 @@ The routes are persisted. Next time you start the cluster, just run `kindling ex
 > localhost:80
 > ```
 
-6. Click **Save hostname**
+6. Click **Save**
 
 The tunnel runs as a system service and stays connected across reboots. Your domain (`dev.myapp.com`) now routes to `localhost:80`, where Traefik picks it up and routes to the callback Ingress kindling created.
 
