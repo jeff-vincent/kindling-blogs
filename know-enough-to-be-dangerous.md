@@ -1,65 +1,57 @@
 # Know Enough to Be Dangerous
 
-I didn't write most of the code in kindling. An AI did. And I think that's the most interesting thing about it.
+I didn't write most of the code in kindling. An AI did.
 
-Not because "AI wrote my code" is novel — at this point, everyone's doing it. What's interesting is *why it worked*. Because frankly, for most of my career, it wouldn't have.
-
----
-
-## The prep you don't notice
-
-I spent years adjacent to infrastructure. I was at GitHub when Actions launched. I worked on developer tools. I sat in meetings where people argued about CI runner architectures and webhook delivery guarantees and container registry auth flows. I absorbed the shape of these problems without ever being the person who solved them with code.
-
-When I sat down to build kindling, I didn't know how to write a Kubernetes operator. I'd never used controller-runtime. I couldn't have told you how to wire up a Custom Resource Definition from scratch. But I knew what one was. I knew *why* you'd want one. I knew the difference between a reconciliation loop and a watcher, conceptually, even if I'd never implemented either.
-
-That turned out to be everything.
+That's not a flex. At this point everyone's using AI to write code. What I keep thinking about is why it actually worked — like, produced a real thing that runs in production and does stuff that's genuinely hard. Because the same tools are available to everyone, and most of what comes out of them is mid.
 
 ---
 
-## The actual workflow
+## The background that mattered
 
-Here's what building with AI looks like when you have domain knowledge:
+I spent years around infrastructure without being the person writing it. I was at GitHub when Actions launched. I worked on developer tools. I sat in rooms where people debated CI runner architectures, webhook delivery semantics, container registry auth. I understood the shape of those problems. I just wasn't the one solving them in code.
 
-**I say:** "The operator needs to auto-inject DATABASE_URL when a service declares a postgres dependency."
+When I started building kindling, I'd never written a Kubernetes operator. Never used controller-runtime. Couldn't have wired up a CRD from scratch. But I knew what a CRD was and why you'd want one. I knew the difference between a reconciliation loop and a watcher, even if I'd never implemented either.
 
-I don't say: "Write me a Kubernetes operator." I don't say: "What's a good architecture for this?" I know the exact behavior I want because I've seen it done — in Heroku, in Railway, in a dozen PaaS tools I've used or studied. I'm describing a feature, not asking for a tutorial.
-
-**I say:** "Secrets set after deploy need to restart the pods that consume them."
-
-I know this because I've been the developer whose environment didn't pick up the new secret. I've been the person filing the support ticket. The requirement doesn't come from a spec — it comes from scar tissue.
-
-**I say:** "The tunnel needs to save the original TLS config as an annotation before stripping it, so we can restore on cleanup."
-
-I know Kubernetes annotations are the right place for this because I've seen the pattern. I couldn't write the JSON patch from memory, but I know the *strategy* is correct. The AI handles the implementation. I handle the "what" and "why."
+That turned out to matter more than I expected.
 
 ---
 
-## What I couldn't have done
+## What it actually looks like
 
-Let me be honest about the gap. Kindling is about 15,000 lines of Go across an operator and a CLI. It has 74 controller specs, e2e tests that spin up real Kind clusters, a React dashboard, Helm chart generation, multi-arch container builds, and a production deploy pipeline.
+When I'm working with AI, I'm not asking it to figure out the architecture. I'm telling it what I need, specifically, because I've seen the problem before.
 
-If I sat down with the Go docs and started typing, I'd finish maybe never. Not because I can't learn Go — I can, I have — but because the sheer surface area of this project would bury a solo developer. Operator SDK semantics. Kustomize overlays. Kaniko build contexts. Cloudflared tunnel orchestration. Crane image copies. The list doesn't end.
+"The operator needs to auto-inject DATABASE_URL when a service declares a postgres dependency." I know the behavior I want because I've used Heroku. I've used Railway. I've seen how this should work from the user's side. I'm not asking for a tutorial — I'm describing a feature.
 
-The AI collapses the implementation time. But it doesn't collapse the *decision* time. Every architectural choice — using annotations for tunnel state, building amd64 in the CI runner instead of cross-compiling on the Mac, prioritizing the in-cluster registry over the Docker daemon for snapshots — those came from me knowing what would break if we did it wrong.
+"Secrets set after deploy need to restart the pods that consume them." I know this because I've been the developer whose environment didn't pick up the new secret. That requirement comes from scar tissue, not a spec.
 
----
-
-## The dangerous part
-
-"Know enough to be dangerous" is usually self-deprecating. You say it to hedge — *I'm not an expert, but...*
-
-I'm reclaiming it. Dangerous is exactly right. If you know enough about a domain to describe the behaviors you want, to recognize when an implementation is wrong, and to steer toward patterns that actually work in production — that's dangerous. You can ship real software. Fast. Alone.
-
-The corollary is also true: AI without domain knowledge produces plausible garbage. It'll write you a Kubernetes operator that looks right, passes a vibe check, and falls apart the first time a pod gets evicted during a rolling update. If you can't smell that bug coming, you'll ship it.
+"The tunnel needs to save the original TLS config as an annotation before stripping it, so we can restore on cleanup." I know annotations are the right place for this because I've seen the pattern. I can't write the JSON patch from memory. But I know the strategy is right, and the AI handles the rest.
 
 ---
 
-## What this means for builders
+## The honest part
 
-The leverage isn't "AI writes code." The leverage is: **domain knowledge + AI = products that would otherwise require a team.**
+Kindling is roughly 15,000 lines of Go across an operator and a CLI. It has 74 controller specs, e2e tests that spin up real Kind clusters, a React dashboard, Helm chart generation, multi-arch container builds, and a production deploy pipeline with TLS.
 
-I'm one person. Kindling has the feature surface of something a small platform team would build. That's not because I'm faster than a team — it's because the bottleneck was never typing speed. It was always knowing what to type.
+I could not have built this alone. Not in a reasonable timeframe. Not because I can't learn Go — I can — but because the surface area is enormous. Operator SDK. Kustomize overlays. Kaniko build contexts. Cloudflared tunnels. Crane image copies. It just keeps going.
 
-If you've spent years in a domain — infrastructure, fintech, healthcare, whatever — you're sitting on the most valuable input an AI can receive: *informed intent*. You know the problems. You know the edge cases. You know why the obvious solution doesn't work.
+The AI collapses the implementation time. But it doesn't collapse the decision time. Every architectural choice — annotations for tunnel state, building amd64 in the CI runner instead of cross-compiling on the Mac, prioritizing the in-cluster registry over the Docker daemon for snapshots — those came from knowing what would break if we got it wrong. The AI doesn't know that. You have to.
 
-That's not "enough to be dangerous." That's the whole game.
+---
+
+## The flip side
+
+AI without domain knowledge produces stuff that looks right and isn't. It'll write you a Kubernetes operator that passes a vibe check and falls apart the first time a pod gets evicted during a rolling update. If you can't smell that coming, you'll ship it.
+
+That's the thing nobody talks about with AI-assisted development. The tool is only as good as the person driving it. Not in a "prompt engineering" sense — in a "do you actually understand the domain you're building in" sense.
+
+---
+
+## What I'm getting at
+
+Kindling does stuff that normally takes a platform team. It runs your whole dev environment on a local Kind cluster. It builds with Kaniko, deploys with a single command, handles secrets, tunnels, production graduation with Helm charts. It's a real product that solves a real problem.
+
+And I built it alone, with AI, because I'd spent enough years in this space to know exactly what it should do. Not how to implement every piece — but what the right behavior was, what the failure modes looked like, what the user actually needed.
+
+If you've been in a domain long enough to have opinions about how things should work — not just preferences, but informed opinions born from watching things break — you're sitting on something valuable. The AI can write the code. But it needs someone who knows what the code should *do*.
+
+That's what "know enough to be dangerous" actually means. Not a hedge. Just the truth about how this stuff gets built now.
