@@ -2,7 +2,7 @@
 
 Your laptop is your staging environment. That's not a slogan — it's the actual architecture. In this post, we'll take a polyglot microservice app from local source code to a production Kubernetes cluster with TLS, Auth0 login, and Stripe webhooks — all working end-to-end. No cloud staging environment. No Docker Compose. No YAML by hand.
 
-The app is [oauth-test](https://github.com/kindling-sh/oauth-test), a four-service demo you can clone and follow along with.
+The app is [oauth-example](https://github.com/kindling-sh/oauth-example), a four-service demo you can clone and follow along with.
 
 ---
 
@@ -64,37 +64,100 @@ Kindling's AI analyzes your repo — finds the four services, detects languages 
 
 You don't write this workflow. You don't maintain it. Push code and it runs.
 
-## Step 4: Configure Auth0, Stripe, and set secrets
+## Step 4: Create Auth0 and Stripe accounts and set credentials
 
-The gateway's deploy manifest references secrets via `secretKeyRef` — Kubernetes won't start the pod if they don't exist. You need to configure your external services and set the secrets *before* the first deploy.
+The gateway's deploy manifest references secrets via `secretKeyRef` — Kubernetes won't start the pod if they don't exist. You need to create your external service accounts and set the credentials *before* the first deploy.
 
-### Start a public tunnel
+### Create an Auth0 application
 
-Auth0 requires a callback URL like `https://your-domain.com/auth/callback`. Stripe requires a webhook URL like `https://your-domain.com/webhooks/stripe`. Both need real, public HTTPS endpoints — even during local development.
+1. Sign up or log in at [auth0.com](https://auth0.com)
+2. In the Auth0 Dashboard, go to **Applications → Create Application**
+3. Name it something like `oauth-example-dev`, select **Regular Web Application**, and click **Create**
+4. In the **Settings** tab, copy these three values — you'll need them in a moment:
+   - **Domain** (e.g. `your-tenant.us.auth0.com`)
+   - **Client ID**
+   - **Client Secret**
 
-Kindling uses Cloudflare's free quick tunnels — no account, no domain, no configuration:
+Don't configure the callback URLs yet — you'll need a public tunnel URL first, which comes after the deploy.
+
+### Create a Stripe webhook endpoint
+
+1. Sign up or log in at [dashboard.stripe.com](https://dashboard.stripe.com)
+2. Make sure you're in **Test mode** (toggle in the top-right)
+3. Open the **Webhooks** tab in [Workbench](https://dashboard.stripe.com/webhooks)
+
+You'll create the actual webhook endpoint later once you have a tunnel URL. For now, just copy your **Stripe Secret Key** from **Developers → API keys** — it starts with `sk_test_`.
+
+### Set the pre-deploy secrets
+
+Set the credentials so the pods can start:
+
+```bash
+kindling secrets set AUTH0_DOMAIN your-tenant.auth0.com
+kindling secrets set AUTH0_CLIENT_ID your-client-id
+kindling secrets set AUTH0_CLIENT_SECRET your-client-secret
+kindling secrets set SESSION_SECRET $(openssl rand -hex 32)
+kindling secrets set STRIPE_SECRET_KEY sk_test_your_stripe_secret_key
+kindling secrets set STRIPE_WEBHOOK_SECRET placeholder
+kindling secrets set PUBLIC_URL http://localhost
+```
+
+`STRIPE_WEBHOOK_SECRET` and `PUBLIC_URL` are placeholders — the gateway will start without them working, but it won't crash. You'll set the real values after starting a tunnel.
+
+Note: `STRIPE_SECRET_KEY` (starts with `sk_test_`) is your Stripe **API key** from **Developers → API keys**. This is different from `STRIPE_WEBHOOK_SECRET` (starts with `whsec_`), which is the webhook **signing secret** you'll get after creating a webhook endpoint in Step 6.
+
+The DSE manifests reference these via `secretKeyRef` — the operator injects them as environment variables into the gateway pod. No secrets in YAML. No secrets in env files. No secrets in git.
+
+## Step 5: Push and deploy
+
+```bash
+git add -A && git commit -m "initial deploy"
+git push origin main
+```
+
+The runner picks up the push, builds all four images, and the operator deploys them. Check status:
+
+```bash
+kindling status
+```
+
+```
+▸ Dev Staging Environments
+    📦 jeff-vincent-gateway      9090   jeff-vincent-gateway.localhost
+    📦 jeff-vincent-inventory    3000   jeff-vincent-inventory.localhost
+    📦 jeff-vincent-orders       5000   jeff-vincent-orders.localhost
+    📦 jeff-vincent-ui           80     jeff-vincent-ui.localhost
+
+▸ All Deployments
+    jeff-vincent-gateway             1/1
+    jeff-vincent-inventory           1/1
+    jeff-vincent-inventory-mongodb   1/1
+    jeff-vincent-orders              1/1
+    jeff-vincent-orders-postgres     1/1
+    jeff-vincent-orders-redis        1/1
+    jeff-vincent-ui                  1/1
+```
+
+Four services, three databases, all running. Open `http://jeff-vincent-ui.localhost` and the dashboard is live. Auth0 and Stripe aren't wired yet — that's next.
+
+## Step 6: Start a tunnel and configure OAuth + webhooks
+
+Now that the services are running, you need a public HTTPS URL for Auth0 callbacks and Stripe webhooks. Kindling uses Cloudflare's free quick tunnels — no account, no domain, no configuration:
 
 ```bash
 brew install cloudflare/cloudflare/cloudflared   # one-time install
 kindling expose
 ```
 
-You'll get a public URL like `https://verb-noun-adj-noun.trycloudflare.com`. Copy it — you'll paste it into Auth0 and Stripe below.
+You'll get a public URL like `https://verb-noun-adj-noun.trycloudflare.com`. Copy it.
 
-The tunnel runs in the background. The URL changes each time you restart it, so you'll update the callback URLs in Auth0 and Stripe when you need to test external integrations. This is an occasional thing — most day-to-day development doesn't need the tunnel at all.
+The tunnel runs in the background. The URL changes each time you restart it, so you'll update the callback URLs in Auth0 and Stripe when you need to test external integrations. Most day-to-day development doesn't need the tunnel at all.
 
-### Create an Auth0 application
+### Configure Auth0 callback URLs
 
-1. Sign up or log in at [auth0.com](https://auth0.com)
-2. In the Auth0 Dashboard, go to **Applications → Create Application**
-3. Name it something like `oauth-test-dev`, select **Regular Web Application**, and click **Create**
-4. In the **Settings** tab, copy these three values — you'll need them in a moment:
-   - **Domain** (e.g. `your-tenant.us.auth0.com`)
-   - **Client ID**
-   - **Client Secret**
-5. Scroll down to **Application URIs** and set the following values:
+Go back to your Auth0 application settings and set:
 
-> **Auth0 Dashboard → Applications → oauth-test-dev → Settings → Application URIs**
+> **Auth0 Dashboard → Applications → oauth-example-dev → Settings → Application URIs**
 >
 > **Allowed Callback URLs**
 > ```
@@ -113,21 +176,19 @@ The tunnel runs in the background. The URL changes each time you restart it, so 
 >
 > Replace `<your-tunnel-url>` with the URL from `kindling expose` (e.g. `verb-noun-adj-noun.trycloudflare.com`).
 
-6. Click **Save Changes**
+Click **Save Changes**.
 
 The callback URL is what Auth0 redirects to after a user authenticates. It must match *exactly* what the gateway sends in the OIDC authorization request — the path `/auth/callback` is handled by the gateway's OIDC callback handler, which exchanges the authorization code for tokens and sets a session cookie.
 
 The gateway's OIDC integration uses Auth0's [Universal Login](https://auth0.com/docs/authenticate/login/auth0-universal-login) — no custom login page needed. For more detail, see [Auth0's Getting Started guide](https://auth0.com/docs/get-started).
 
-### Create a Stripe webhook endpoint
+### Create the Stripe webhook endpoint
 
-1. Sign up or log in at [dashboard.stripe.com](https://dashboard.stripe.com)
-2. Make sure you're in **Test mode** (toggle in the top-right)
-3. Open the **Webhooks** tab in [Workbench](https://dashboard.stripe.com/webhooks) and click **Create an event destination**
-4. Walk through the creation flow:
+Now create the webhook endpoint in Stripe with your tunnel URL:
 
-> **Stripe Dashboard → Workbench → Webhooks → Create an event destination**
->
+1. In [Workbench → Webhooks](https://dashboard.stripe.com/webhooks), click **Create an event destination**
+2. Walk through the creation flow:
+
 > **Events from**
 > ```
 > Your account
@@ -150,43 +211,26 @@ The gateway's OIDC integration uses Auth0's [Universal Login](https://auth0.com/
 > ```
 > https://<your-tunnel-url>/webhooks/stripe
 > ```
->
-> Use the same tunnel URL from `kindling expose`.
 
-5. Click **Create destination**
-6. Select your new endpoint, then click **Click to reveal** to copy the signing secret (`whsec_...`)
-
-> **Stripe Dashboard → Workbench → Webhooks → (your endpoint) → Click to reveal**
->
-> Copy the value starting with `whsec_` — you'll pass this to `kindling secrets set` below.
+3. Click **Create destination**
+4. Select your new endpoint, then click **Click to reveal** to copy the signing secret (`whsec_...`)
 
 The webhook URL is where Stripe sends event payloads via POST. The gateway receives the request at `/webhooks/stripe`, verifies the `Stripe-Signature` header against the signing secret using HMAC-SHA256, and forwards validated payloads to the orders service. Unverified requests are rejected with a 400. See [Stripe's webhook docs](https://docs.stripe.com/webhooks) for background on signature verification and event types.
 
-### Set the secrets
+### Set the real PUBLIC_URL and webhook secret
 
-Now set the secrets with the real values from Auth0 and Stripe:
+Now update the placeholder secrets with the real values:
 
 ```bash
-kindling secrets set AUTH0_DOMAIN your-tenant.auth0.com
-kindling secrets set AUTH0_CLIENT_ID your-client-id
-kindling secrets set AUTH0_CLIENT_SECRET your-client-secret
-kindling secrets set SESSION_SECRET $(openssl rand -hex 32)
-kindling secrets set STRIPE_WEBHOOK_SECRET whsec_your_signing_secret
 kindling secrets set PUBLIC_URL https://<your-tunnel-url>
+kindling secrets set STRIPE_WEBHOOK_SECRET whsec_your_signing_secret
 ```
 
-Replace `<your-tunnel-url>` with the URL from `kindling expose`.
+The gateway pod will restart automatically to pick up the new values. Verify with `kindling status` that the gateway is back to 1/1.
 
-The DSE manifests reference these via `secretKeyRef` — the operator injects them as environment variables into the gateway pod. No secrets in YAML. No secrets in env files. No secrets in git.
+## Step 7: The inner dev loop
 
-## Step 5: Push and deploy
-
-```bash
-git add -A && git commit -m "feat: add Auth0 and Stripe integrations"
-git push origin main
-```
-
-The runner picks up the push, builds all four images, and the operator deploys them. Check status:
+Now you're developing. You change code. You need it reflected immediately. Check status:
 
 ```bash
 kindling status
@@ -232,7 +276,7 @@ kindling debug -d jeff-vincent-orders --port 5678
 
 Attach your IDE's debugger to `localhost:5678` and set breakpoints in the orders service while it's running inside the cluster, talking to real Postgres and Redis.
 
-## Step 7: Test the OAuth and Stripe flows
+## Step 8: Test the OAuth and Stripe flows
 
 With the services running and secrets configured, verify everything is wired:
 
@@ -248,7 +292,7 @@ Open your tunnel URL in a browser (e.g. `https://verb-noun-adj-noun.trycloudflar
 
 For Stripe, trigger a test event from the Stripe Dashboard (or use the [Stripe CLI](https://docs.stripe.com/stripe-cli)). The event hits the gateway at your tunnel URL via the same path — Cloudflare → localhost:80 → Traefik → gateway — the signature is verified against the signing secret, and the payload is forwarded to the orders service, which updates the order status in Postgres.
 
-## Step 8: Deploy to production
+## Step 9: Deploy to production
 
 The dev environment is validated. Auth0 callbacks work. Stripe webhooks land. Time to go live.
 
@@ -262,11 +306,14 @@ The production dashboard connects to your real cluster. From there:
 2. **Deploy** to production — images are re-tagged and pushed to your production registry, manifests are applied
 3. **TLS** — cert-manager provisions Let's Encrypt certificates automatically
 
+> **Note:** After deploying, you'll need to update your domain's DNS A record to point to the new load balancer IP (find it with `kubectl get svc traefik -n traefik`). DNS propagation can take a few minutes — during that time you may see a browser warning like "Your connection is not private" (`ERR_CERT_AUTHORITY_INVALID`). This is normal. Go walk your dog, knit a sweater, contemplate the mass of the universe — whatever you do, don't sit there refreshing the browser. Once DNS propagates, cert-manager will complete the ACME challenge and the Let's Encrypt certificate will be issued automatically.
+
 In production, swap the secrets for production values:
 
 - `AUTH0_DOMAIN` → your production Auth0 tenant
 - `AUTH0_CLIENT_ID` / `AUTH0_CLIENT_SECRET` → production app credentials
-- `STRIPE_WEBHOOK_SECRET` → production webhook signing secret
+- `STRIPE_SECRET_KEY` → production Stripe API key (starts with `sk_live_`)
+- `STRIPE_WEBHOOK_SECRET` → production webhook signing secret (starts with `whsec_`)
 - `PUBLIC_URL` → your production domain
 
 The same code, the same architecture, the same deployment model. The only things that change are the secrets and the domain.
@@ -280,11 +327,12 @@ Let's trace the full path:
 1. **Source code** on your laptop
 2. **`kindling init`** — local Kind cluster with operator, registry, ingress
 3. **`kindling generate`** — AI-generated CI workflow
-4. **`kindling expose` + `kindling secrets set`** — start tunnel, configure Auth0 + Stripe with the URL, inject secrets
+4. **`kindling secrets set`** — set Auth0/Stripe credentials so pods can start
 5. **`git push`** — local runner builds with Kaniko, deploys via operator
-6. **`kindling sync`** — live code changes without rebuilding
-7. **Test OAuth + Stripe** — verify callback flows end-to-end
-8. **Production deploy** — same images, same config, real cluster with TLS
+6. **`kindling expose` + `kindling secrets set`** — start tunnel, configure Auth0/Stripe callback URLs, set PUBLIC_URL
+7. **`kindling sync`** — live code changes without rebuilding
+8. **Test OAuth + Stripe** — verify callback flows end-to-end
+9. **Production deploy** — same images, same config, real cluster with TLS
 
 No Docker Compose file. No Helm charts. No Terraform. No cloud staging environment bill. No "works on my machine" gaps between dev and prod.
 
@@ -296,20 +344,26 @@ The entire staging environment runs on your laptop. When it works there, it work
 
 ```bash
 brew install kindlingdev/tap/kindling
-git clone https://github.com/kindling-sh/oauth-test
-cd oauth-test
+git clone https://github.com/kindling-sh/oauth-example
+cd oauth-example
 kindling init
-kindling runners -u <user> -r oauth-test -t <pat>
+kindling runners -u <user> -r oauth-example -t <pat>
 kindling generate -k <api-key> -r .
-kindling expose
-# copy the tunnel URL
+# Set credentials so pods can start
 kindling secrets set AUTH0_DOMAIN <your-domain>
 kindling secrets set AUTH0_CLIENT_ID <your-id>
 kindling secrets set AUTH0_CLIENT_SECRET <your-secret>
 kindling secrets set SESSION_SECRET $(openssl rand -hex 32)
-kindling secrets set STRIPE_WEBHOOK_SECRET <whsec_...>
-kindling secrets set PUBLIC_URL <your-tunnel-url>
+kindling secrets set STRIPE_SECRET_KEY <sk_test_...>
+kindling secrets set STRIPE_WEBHOOK_SECRET placeholder
+kindling secrets set PUBLIC_URL http://localhost
+# Deploy
 git push origin main
+# Start tunnel, configure Auth0/Stripe callback URLs, then update secrets
+kindling expose
+# copy the tunnel URL, set it in Auth0 + Stripe dashboards
+kindling secrets set PUBLIC_URL <your-tunnel-url>
+kindling secrets set STRIPE_WEBHOOK_SECRET <whsec_...>
 ```
 
 Your laptop is your staging environment. Start building.
