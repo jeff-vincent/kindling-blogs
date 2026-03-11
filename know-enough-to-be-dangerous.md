@@ -6,13 +6,15 @@ That's not a flex. At this point everyone's using AI to write code. What I keep 
 
 ---
 
-## The background that mattered
+## Where the phrase comes from
 
-I spent years around infrastructure without being the person writing it. I was at GitHub when Actions launched. I worked on developer tools. I sat in rooms where people debated CI runner architectures, webhook delivery semantics, container registry auth. I understood the shape of those problems. I just wasn't the one solving them in code.
+My first lead engineer told me I "knew enough to be dangerous." He meant it as both a compliment and a warning. I could build things — I had the instincts, the product sense, the ability to look at a problem and see a path through it. But what I built was ad hoc. I'd reach for whatever worked instead of the pattern that would hold up over time. He told me it was just a matter of time. Keep building, keep learning, and eventually the knowledge would stack up enough that the "dangerous" part would just become "good."
+
+He was right, mostly. I spent years around infrastructure without being the person writing it. I was at GitHub when Actions launched. I worked on developer tools. I sat in rooms where people debated CI runner architectures, webhook delivery semantics, container registry auth. I understood the shape of those problems. I just wasn't the one solving them in code.
 
 When I started building kindling, I'd never written a Kubernetes operator. Never used controller-runtime. Couldn't have wired up a CRD from scratch. But I knew what a CRD was and why you'd want one. I knew the difference between a reconciliation loop and a watcher, even if I'd never implemented either.
 
-That turned out to matter more than I expected.
+The gap between "I know how I'd do it" and "I can actually do it" had always been there. It just got a lot smaller.
 
 ---
 
@@ -46,12 +48,14 @@ That's the thing nobody talks about with AI-assisted development. The tool is on
 
 ---
 
-## What I'm getting at
+## The gap is closing
 
-Kindling does stuff that normally takes a platform team. It runs your whole dev environment on a local Kind cluster. It builds with Kaniko, deploys with a single command, handles secrets, tunnels, production graduation with Helm charts. It's a real product that solves a real problem.
+For most of my career, "I know how I'd do it" was where things stopped. You have the vision, you understand the problem, you can describe the solution in detail — and then you either need a team to build it or six months you don't have to skill up on the implementation details yourself.
 
-And I built it alone, with AI, because I'd spent enough years in this space to know exactly what it should do. Not how to implement every piece — but what the right behavior was, what the failure modes looked like, what the user actually needed.
+That gap is disappearing. AI collapses the distance between knowing what to build and actually building it. And tools like kindling exist on both sides of that equation — it's a product born from this way of working, and it's a product that makes this way of working easier for everyone else.
 
-If you've been in a domain long enough to have opinions about how things should work — not just preferences, but informed opinions born from watching things break — you're sitting on something valuable. The AI can write the code. But it needs someone who knows what the code should *do*.
+Kindling does stuff that normally takes a platform team. It runs your whole dev environment on a local Kind cluster. Builds with Kaniko, deploys with a single command, handles secrets, tunnels, production graduation with Helm charts. It's a real product that solves a real problem. And I built it alone because I'd spent enough years in this space to know exactly what it should do.
 
-That's what "know enough to be dangerous" actually means. Not a hedge. Just the truth about how this stuff gets built now.
+If you've been in a domain long enough to have opinions about how things should work — not just preferences, but informed opinions from watching things break — pair that with your favorite AI agent and go build something. The "I know how I'd do it" era is over. Now you can just do it.
+
+That's what "know enough to be dangerous" actually means now. Not a gap between knowledge and ability. Just the starting line.
