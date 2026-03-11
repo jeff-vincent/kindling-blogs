@@ -10,9 +10,15 @@ That's not a flex. At this point everyone's using AI to write code. What I keep 
 
 My first lead engineer told me I "knew enough to be dangerous." He meant it as both a compliment and a warning. I could build things — I had the instincts, the product sense, the ability to look at a problem and see a path through it. But what I built was ad hoc. I'd reach for whatever worked instead of the pattern that would hold up over time. He told me it was just a matter of time. Keep building, keep learning, and eventually the knowledge would stack up enough that the "dangerous" part would just become "good."
 
-He was right, mostly. I spent years around infrastructure without being the person writing it. I was at GitHub when Actions launched. I worked on developer tools. I sat in rooms where people debated CI runner architectures, webhook delivery semantics, container registry auth. I understood the shape of those problems. I just wasn't the one solving them in code.
+He was right, mostly. It just took a weird path to get there.
 
-When I started building kindling, I'd never written a Kubernetes operator. Never used controller-runtime. Couldn't have wired up a CRD from scratch. But I knew what a CRD was and why you'd want one. I knew the difference between a reconciliation loop and a watcher, even if I'd never implemented either.
+I spent a few years at MacStadium building open-source developer tools — a Python SDK, GitHub Actions integrations for ephemeral CI runners, that kind of thing. I live-demoed for teams at PyTorch and Disney, which sounds impressive but mostly meant I was the guy nervously refreshing a terminal on a webinar. From there I went to Velocity, a Kubernetes startup, where I built end-to-end demo apps — microservices, MLOps pipelines, event-driven architectures, GPU-backed workloads — to show what the platform could do. Then MongoDB, where I embedded with the engineering team building their Kubernetes operator (MCK). I deployed it, broke it, documented it, built internal tooling around it, and generally spent my days living inside the operator lifecycle.
+
+None of those were "senior engineer" roles. I was a technical writer. DevRel. The person who builds the demo and writes the docs. But I was always building — deploying clusters, wiring up CI, debugging why a pod wasn't scheduling. I built a whole Kubernetes-native dev platform on my own (Labbrly) just to see if I could: JWT auth mapped to namespaces, async Python microservices, Redis queues, a compute API for interactive environments. It worked. It was also, in my first lead's words, ad hoc as hell.
+
+The point is: by the time I started kindling, I'd spent years accumulating context about how Kubernetes, CI/CD, and developer platforms actually work. Not from reading docs — from deploying things, watching them break, and figuring out why.
+
+When I started building kindling, I'd never written a Kubernetes operator in Go. Never used controller-runtime. Couldn't have wired up a CRD from scratch. But I knew what a CRD was and why you'd want one. I knew the difference between a reconciliation loop and a watcher, even if I'd never implemented either.
 
 The gap between "I know how I'd do it" and "I can actually do it" had always been there. It just got a lot smaller.
 
